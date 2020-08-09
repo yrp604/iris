@@ -1,0 +1,16 @@
+[package]
+name = "iris"
+version = "0.1.0"
+authors = ["yrp <yrp604@protonmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dwarf-dis = { path = "../dwarf-dis" }
+log = "0.4"
+xmas-elf = "0.7"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
