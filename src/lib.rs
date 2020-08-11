@@ -295,7 +295,11 @@ impl<'a> DwarfVm<'a> {
 
             let _ = self.trace_state();
 
-            self.step()?;
+            match self.step() {
+                Err(DwarfVmError::Breakpoint) => return Ok(ins),
+                Err(e) => return Err(e),
+                _ => (),
+            }
 
             ins += 1;
         }
@@ -333,7 +337,7 @@ impl<'a> DwarfVm<'a> {
     pub fn log_state(&self) -> Result<(), DwarfVmError> {
         let (_, op) = decode(self.target_read(self.pc)).map_err(|_| DwarfVmError::Decode)?;
         warn!("pc: 0x{:04x} [{}]", self.pc, op);
-        for (ii, vv) in self.stack.iter().rev().take(3).enumerate() {
+        for (ii, vv) in self.stack.iter().rev().take(5).enumerate() {
             warn!("{:02x} | {:016x}", ii * 8, vv);
         }
         warn!("------------");
