@@ -295,7 +295,11 @@ impl<'a> DwarfVm<'a> {
 
             let _ = self.trace_state();
 
-            self.step()?;
+            match self.step() {
+                Err(DwarfVmError::Breakpoint) => return Ok(ins),
+                Err(e) => return Err(e),
+                _ => (),
+            }
 
             ins += 1;
         }
