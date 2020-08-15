@@ -330,10 +330,10 @@ impl<'a> DwarfVm<'a> {
             .expect("Attempt to index past stack bounds")
     }
 
-    pub fn log_state(&self) -> Result<(), DwarfVmError> {
+    pub fn log_state(&self, stack_amt: usize) -> Result<(), DwarfVmError> {
         let (_, op) = decode(self.target_read(self.pc)).map_err(|_| DwarfVmError::Decode)?;
         warn!("pc: 0x{:04x} [{}]", self.pc, op);
-        for (ii, vv) in self.stack.iter().rev().take(3).enumerate() {
+        for (ii, vv) in self.stack.iter().rev().take(stack_amt).enumerate() {
             warn!("{:02x} | {:016x}", ii * 8, vv);
         }
         warn!("------------");
