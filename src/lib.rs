@@ -8,6 +8,7 @@ use xmas_elf::ElfFile;
 
 use dwarf_dis::{decode, Op};
 
+/// A DwarfVm state snapshot
 #[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub struct DwarfVmState {
     pc: u64,
@@ -32,6 +33,7 @@ impl Error for DwarfVmError {
     }
 }
 
+/// A Dwarf Stack Virtual Machine
 pub struct DwarfVm<'a> {
     pub pc: u64,
     pub stack: Vec<u64>,
@@ -52,6 +54,13 @@ impl<'a> fmt::Display for DwarfVm<'a> {
 }
 
 impl<'a> DwarfVm<'a> {
+    /// Create a new Dwarf VM
+    ///
+    /// pc: the initial PC value for the dwarf VM from the coredump
+    /// ctx: the address of the dwarf context structure. This is an argument to
+    /// `execute_stack_op` and the dwarf VM will use it to fetch registers.
+    /// core: the backing memory for the emulator, can be created via `gcore`
+    /// from gdb.
     pub fn new(pc: u64, ctx: u64, core: &'a [u8]) -> Self {
         let stack = Default::default();
         let core = ElfFile::new(&core).expect("Could not parse core");
@@ -66,6 +75,7 @@ impl<'a> DwarfVm<'a> {
         }
     }
 
+    /// Execute a single Dwarf VM instruction
     pub fn step(&mut self) -> Result<(), DwarfVmError> {
         let (sz, mut op) = decode(self.target_read(self.pc)).map_err(|_| DwarfVmError::Decode)?;
 
@@ -284,6 +294,7 @@ impl<'a> DwarfVm<'a> {
         Ok(())
     }
 
+    /// Execute many Dwarf VM instructions
     pub fn run(&mut self, limit: Option<usize>) -> Result<usize, DwarfVmError> {
         let mut ins = 0;
         loop {
@@ -293,7 +304,7 @@ impl<'a> DwarfVm<'a> {
                 }
             }
 
-            let _ = self.trace_state();
+            let _ = self.trace_state(3);
 
             match self.step() {
                 Err(DwarfVmError::Breakpoint) => return Ok(ins),
@@ -305,6 +316,10 @@ impl<'a> DwarfVm<'a> {
         }
     }
 
+    /// Dump the current DwarfVM state
+    ///
+    /// This avoids dumping the context structure and coredump, as these are
+    /// immutable once emulation starts and would add significant overhead.
     pub fn state(&self) -> DwarfVmState {
         DwarfVmState {
             pc: self.pc,
@@ -312,6 +327,7 @@ impl<'a> DwarfVm<'a> {
         }
     }
 
+    /// Load a DwarfVM state
     pub fn set_state(&mut self, state: &DwarfVmState) {
         self.pc = state.pc;
         self.stack = state.stack.clone();
@@ -334,9 +350,11 @@ impl<'a> DwarfVm<'a> {
             .expect("Attempt to index past stack bounds")
     }
 
+    /// Log the current state via warn
     pub fn log_state(&self, stack_amt: usize) -> Result<(), DwarfVmError> {
         let (_, op) = decode(self.target_read(self.pc)).map_err(|_| DwarfVmError::Decode)?;
         warn!("pc: 0x{:04x} [{}]", self.pc, op);
+        warn!("sp: 0x{:04x}", self.stack.len() * 8);
         for (ii, vv) in self.stack.iter().rev().take(stack_amt).enumerate() {
             warn!("{:02x} | {:016x}", ii * 8, vv);
         }
@@ -345,10 +363,12 @@ impl<'a> DwarfVm<'a> {
         Ok(())
     }
 
-    pub fn trace_state(&self) -> Result<(), DwarfVmError> {
+    /// Log the current state via trace
+    pub fn trace_state(&self, stack_amt: usize) -> Result<(), DwarfVmError> {
         let (_, op) = decode(self.target_read(self.pc)).map_err(|_| DwarfVmError::Decode)?;
         trace!("pc: 0x{:04x} [{}]", self.pc, op);
-        for (ii, vv) in self.stack.iter().rev().take(3).enumerate() {
+        trace!("sp: 0x{:04x}", self.stack.len() * 8);
+        for (ii, vv) in self.stack.iter().rev().take(stack_amt).enumerate() {
             trace!("{:02x} | {:016x}", ii * 8, vv);
         }
         trace!("------------");
@@ -356,16 +376,21 @@ impl<'a> DwarfVm<'a> {
         Ok(())
     }
 
+    /// Get the current memory overlay BTree
     pub fn overlay(&mut self) -> &mut BTreeMap<u64, Vec<u8>> {
+        // Note that memory overlay checks are very inefficient right now, if you
+        // need to make heavy use of these please file an issue.
         &mut self.overlay
     }
 
+    /// get the current breakpoints BTree
     pub fn breakpoints(
         &mut self,
     ) -> &mut BTreeMap<u64, Box<dyn FnMut(&mut Self, &mut Op) -> bool>> {
         &mut self.breakpoints
     }
 
+    /// Add a new breakpoint
     pub fn set_breakpoint<F: 'static + FnMut(&mut Self, &mut Op) -> bool>(
         &mut self,
         pc: u64,
